@@ -56,6 +56,7 @@ int rc;
 void print_ethFrame(struct sr_ethernet_hdr*);
 void print_arp(struct sr_arphdr*);
 struct arp_entry* updateArpCache(uint32_t, unsigned char*);
+void sendBufferPackets(struct arp_entry*, unsigned char*);
 
 /*--------------------------------------------------------------------- 
  * Method: sr_init(void)
@@ -187,15 +188,28 @@ void sr_handlepacket(struct sr_instance* sr,
           	// any packets saved in buffer waiting for the MAC address are sent
             struct arp_entry* arpEntry;
             arpEntry = updateArpCache(arphdr->ar_sip, arphdr->ar_sha);
+            //sendBufferPackets(arpEntry, arphdr->ar_sha);
+            
             struct packet_buffer* buffer;
             buffer = arpEntry->buffer;
+            unsigned char* addr = arpEntry->addr;   
             
-          	// sending all waiting packets
+            // sending all waiting packets
             while (buffer != NULL) {
+
+                struct sr_arphdr *arp_rep = (struct sr_arphdr*) (buffer + sizeof(struct sr_ethernet_hdr));
+ 
+                memcpy(arp_rep->ar_tha, addr, sizeof(unsigned char)*6);
                 rc = sr_send_packet(sr,buffer->packet, buffer->len, buffer->interface);
                 assert(rc == 0);
+                struct packet_buffer* temp = buffer;
                 buffer = buffer->next;
+                free(temp);
             }
+
+            arpEntry->buffer = NULL;
+
+
 
         } else {
             printf("error, no valid opCode in ARP\n");
@@ -358,7 +372,7 @@ struct arp_entry* updateArpCache(uint32_t ipAddr, unsigned char* macAddr) {
         if (memcmp(&(cur->ip.s_addr), &ipAddr, sizeof(uint32_t)) == 0) {
             // IP address found in ARP cache, update ARP cache's IP:MAC mapping and return
             memcpy(&(cur->addr), macAddr, sizeof(unsigned char)*ETHER_ADDR_LEN);
-            return;
+            return cur;
         }
 
         ite = ite->next;
@@ -366,13 +380,44 @@ struct arp_entry* updateArpCache(uint32_t ipAddr, unsigned char* macAddr) {
 
     // No record for this IP address exists in ARP cache - add one to the ***start*** of the cache
     struct arp_entry *newArp = (struct arp_entry*) malloc(sizeof(struct arp_entry));
-
+    memset(newArp, 0, sizeof(struct arp_entry));
     memcpy(&(newArp->addr), macAddr, ETHER_ADDR_LEN);
     memcpy(&(newArp->ip.s_addr), &ipAddr, sizeof(uint32_t));
     newArp->next = arp_entry_head->next;
     arp_entry_head->next = newArp;
-    return;
+    return newArp;
 }
+
+/*
+ Method: sendBufferPackets()
+ *
+ * takes an arp_entry* and a mac address to assign to each packet buffer that
+ * the arp_entry* holds. Finally it sends those packets to their dest and empties
+ * the arp_entry's buffer
+ *
+ 
+
+void sendBufferPackets(struct arp_entry* cacheEntry) {
+    struct packet_buffer* buffer;
+    unsigned char* addr = cacheEntry->addr;
+    buffer = cacheEntry->buffer;
+    
+    // sending all waiting packets
+    while (buffer != NULL) {
+
+        struct sr_arphdr *arphdr = (struct sr_arphdr*) (buffer + sizeof(struct sr_ethernet_hdr));
+ 
+        memcpy(arphdr->ar_tha, addr, sizeof(unsigned char)*6);
+        rc = sr_send_packet(sr,buffer->packet, buffer->len, buffer->interface);
+        assert(rc == 0);
+        struct packet_buffer* temp = buffer;
+        buffer = buffer->next;
+        free(temp);
+    }
+
+    cacheEntry->buffer = NULL;
+}
+*/
 
 void print_ethFrame(struct sr_ethernet_hdr *ethFrame) {
 
