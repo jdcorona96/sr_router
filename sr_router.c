@@ -49,7 +49,7 @@ struct arp_entry *arp_entry_head;
   
 // Static Vars // 
 struct sr_rt *routingTable = NULL;
-struct sr_if *interfaceList = NULL;
+//struct sr_if *interfaceList = NULL;
 int rc;
 
 // function headers //
@@ -85,8 +85,8 @@ void sr_init(struct sr_instance* sr)
     }
   */
   	// LOAD INTERFACE LIST
-  	interfaceList = sr->if_list;
-  	assert(interfaceList);
+    //interfaceList = sr->if_list;
+  	//assert(interfaceList);
   
   	// LOAD ARP TABLE
     arp_entry_head = (struct arp_entry*) malloc(sizeof(struct arp_entry));
@@ -180,6 +180,7 @@ void sr_handlepacket(struct sr_instance* sr,
           print_arp(arphdr);
           
           int rc = sr_send_packet(sr, (uint8_t*) eth_hdr, len, interface);
+          printf("sending ARP reply\n");
           assert(rc == 0);
             
         } else if (opCode == 2) { // this is reply ARP
@@ -202,6 +203,7 @@ void sr_handlepacket(struct sr_instance* sr,
  
                 memcpy(arp_rep->ar_tha, addr, sizeof(unsigned char)*6);
                 rc = sr_send_packet(sr,buffer->packet, buffer->len, buffer->interface);
+                printf("sending IP after ARP reply\n");
                 assert(rc == 0);
                 struct packet_buffer* temp = buffer;
                 buffer = buffer->next;
@@ -226,8 +228,9 @@ void sr_handlepacket(struct sr_instance* sr,
       	struct ip *iphdr = (struct ip*) (packet + sizeof(struct sr_ethernet_hdr));  
       
       	// * * IP PACKET PROCESSING (project2 slides, slide 7) * * 
-      	// Verify IP version is '4'
-      	assert(ntohs(iphdr->ip_v) == 4);
+        // Verify IP version is '4'
+      	//printf("ip header - verstion: %d\n",iphdr->ip_v);
+        assert(iphdr->ip_v == 4);
       
       	// NOTE: Checksum ver & TTL decrementation not required in this project but it would normally happen here
        
@@ -281,7 +284,21 @@ void sr_handlepacket(struct sr_instance* sr,
             // Update ethernet header and send the packet to the IP:MAC given
         	memcpy(eth_hdr->ether_shost, eth_hdr->ether_dhost, sizeof(uint8_t)*ETHER_ADDR_LEN); 
           	memcpy(eth_hdr->ether_dhost, arpRecord->addr, sizeof(uint8_t)*ETHER_ADDR_LEN);
+            
+           
+
+            printf("\tarp cache address: %X:%X:%X:%X:%X:%X\n",
+                arpRecord->addr[0],
+                arpRecord->addr[1],
+                arpRecord->addr[2],
+                arpRecord->addr[3],
+                arpRecord->addr[4],
+                arpRecord->addr[5]);
+
+
+            print_ethFrame(eth_hdr);
           	rc = sr_send_packet(sr, packet, len, iface);
+            printf("sending IP packet\n");
             assert(rc == 0);  
         } else {
      		// Create ARP cache entry - will have null MAC address until ARP reply is received
@@ -315,6 +332,8 @@ void sr_handlepacket(struct sr_instance* sr,
       	// THIS IS NOT AN IP OR ARP PACKET, WE SHOULD NEVER GET HERE
       	assert(0);
     }
+
+    printf("---------------------------- END OF PACKET HANDLING -----------------------------------------------\n");
 }/* end sr_ForwardPacket */
 
 
@@ -336,7 +355,7 @@ struct arp_entry* getArpEntry(uint32_t ipAddr) {
           	return entry;
         }
     }
-  	assert(entry == NULL);
+  	assert(entry->next == NULL);
   	return entry;
 }
 
@@ -420,7 +439,7 @@ void sendBufferPackets(struct arp_entry* cacheEntry) {
 
 void print_ethFrame(struct sr_ethernet_hdr *ethFrame) {
 
-    printf("dest: %X:%X:%X:%X:%X:%X\n",
+    printf("\tdest: %X:%X:%X:%X:%X:%X\n",
             ethFrame->ether_dhost[0],
             ethFrame->ether_dhost[1],
             ethFrame->ether_dhost[2],
@@ -428,7 +447,7 @@ void print_ethFrame(struct sr_ethernet_hdr *ethFrame) {
             ethFrame->ether_dhost[4],
             ethFrame->ether_dhost[5]);
 
-    printf("src: %X:%X:%X:%X:%X:%X\n",
+    printf("\tsrc: %X:%X:%X:%X:%X:%X\n",
             ethFrame->ether_shost[0],
             ethFrame->ether_shost[1],
             ethFrame->ether_shost[2],
@@ -436,7 +455,7 @@ void print_ethFrame(struct sr_ethernet_hdr *ethFrame) {
             ethFrame->ether_shost[4],
             ethFrame->ether_shost[5]);
 
-    printf("type: %X\n", ntohs(ethFrame->ether_type));
+    printf("\ttype: %X\n", ntohs(ethFrame->ether_type));
 
 }
             
