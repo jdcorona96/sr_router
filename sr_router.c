@@ -57,6 +57,7 @@ void print_ethFrame(struct sr_ethernet_hdr*);
 void print_arp(struct sr_arphdr*);
 struct arp_entry* updateArpCache(uint32_t, unsigned char*);
 void sendBufferPackets(struct arp_entry*, unsigned char*);
+struct arp_entry* getArpEntry(uint32_t);
 
 /*--------------------------------------------------------------------- 
  * Method: sr_init(void)
@@ -237,8 +238,7 @@ void sr_handlepacket(struct sr_instance* sr,
       	struct sr_rt *matchingEntry = NULL;
       	struct sr_rt *defaultRoute = NULL;
       	uint32_t longestMask = 0;
-      	uint32_t defaultRouteEntry = 0;
-      
+      	      
       	// Examine all routing table entries to find the match with the longest mask
       	while (thisEntry) {
           	uint32_t mask = thisEntry->mask.s_addr;
@@ -255,33 +255,32 @@ void sr_handlepacket(struct sr_instance* sr,
                   longestMask = mask;
             }
 			thisEntry = thisEntry->next;
-            }
         }
       	
   		// Determine IP, MAC address, and interface we must send packet to
   		uint32_t nexthopIp;
-  		unsigned char iface[sr_IFACE_NAMELEN];
+  		char iface[sr_IFACE_NAMELEN];
   		struct arp_entry *arpRecord = NULL; 
   
       	if (matchingEntry == NULL) { // No matching entry was found - packet goes to default route        	
           	nexthopIp = defaultRoute->gw.s_addr;
-          	strcpy(iface, defaultRoute.interface);
+          	strcpy(iface, defaultRoute->interface);
         }
 		else if (matchingEntry->gw.s_addr == 0) { // Destination is a local address, packet goes to destination
           	nexthopIp = destination;
-          	strcpy(iface, matchingEntry.interface);
+          	strcpy(iface, matchingEntry->interface);
         }
         else { // Destination is NOT a local address, packet goes to nexthop
           	nexthopIp = matchingEntry->gw.s_addr;  
-          	strcpy(iface, matchingEntry.interface);
+          	strcpy(iface, matchingEntry->interface);
         }
   		arpRecord = getArpEntry(nexthopIp);
   		
   		// Send packet if an ARP record was found, otherwise enqueue it and request ARP info
   		if (arpRecord) {
             // Update ethernet header and send the packet to the IP:MAC given
-        	eth_hdr->ether_shost = eth_hdr->ether_dhost; 
-          	eth_hdr->ether_dhost = arpRecord->addr;
+        	memcpy(eth_hdr->ether_shost, eth_hdr->ether_dhost, sizeof(uint8_t)*ETHER_ADDR_LEN); 
+          	memcpy(eth_hdr->ether_dhost, arpRecord->addr, sizeof(uint8_t)*ETHER_ADDR_LEN);
           	rc = sr_send_packet(sr, packet, len, iface);
             assert(rc == 0);  
         } else {
@@ -292,11 +291,11 @@ void sr_handlepacket(struct sr_instance* sr,
           	// Add this packet to the queue that will be sent to destination device after ARP reply is received.
           	// Must copy local data to queued packet struct so it can exist outside this scope...
           	struct packet_buffer* queuedPacket = (struct packet_buffer *) malloc(sizeof(struct packet_buffer));
-          	queuedPacket.packet = (uint8_t *) malloc(sizeof(uint8_t) * len);
-          	memcpy(queuedPacket.packet, packet, len);
-  			queuedPacket.len = len;
-  			strcpy(queuedPacket.interface, iface);
-    		queuedPacket.next = NULL;
+          	queuedPacket->packet = (uint8_t *) malloc(sizeof(uint8_t) * len);
+          	memcpy(queuedPacket->packet, packet, len);
+  			queuedPacket->len = len;
+  			strcpy(queuedPacket->interface, iface);
+    		queuedPacket->next = NULL;
           	
           	if (!arpRecord->buffer) {
             	// Packet buffer queue is currently EMPTY -- this packet will be the first in queue
