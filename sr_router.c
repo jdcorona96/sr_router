@@ -40,6 +40,7 @@ struct packet_buffer {
 // Struct for ARP table entries
 struct arp_entry {
     unsigned char addr[ETHER_ADDR_LEN];
+	int macNotNull = 0;
     struct in_addr ip;
     struct packet_buffer* buffer;
     struct arp_entry *next;
@@ -190,6 +191,7 @@ void sr_handlepacket(struct sr_instance* sr,
           	// any packets saved in buffer waiting for the MAC address are sent
             struct arp_entry* arpEntry;
             arpEntry = updateArpCache(arphdr->ar_sip, arphdr->ar_sha);
+			arpEntry->macNotNull = 1;
             //sendBufferPackets(arpEntry, arphdr->ar_sha);
             
             struct packet_buffer* buffer;
@@ -350,7 +352,7 @@ struct arp_entry* getArpEntry(uint32_t ipAddr) {
   	
   	while (entry->next) {
         entry = entry->next;
-      	if (ipAddr == entry->ip.s_addr) {
+      	if (ipAddr == entry->ip.s_addr && entry->macNotNull) {
         	// Parameter IP address found in ARP cache, return ARP table entry
           	return entry;
         }
