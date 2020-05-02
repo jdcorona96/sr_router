@@ -40,7 +40,7 @@ struct packet_buffer {
 // Struct for ARP table entries
 struct arp_entry {
     unsigned char addr[ETHER_ADDR_LEN];
-	int macNotNull = 0;
+	int macNotNull;
     struct in_addr ip;
     struct packet_buffer* buffer;
     struct arp_entry *next;
