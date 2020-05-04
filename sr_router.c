@@ -40,7 +40,7 @@ struct packet_buffer {
 // Struct for ARP table entries
 struct arp_entry {
     unsigned char addr[ETHER_ADDR_LEN];
-	int macNotNull = 0;
+	int macNotNull;
     struct in_addr ip;
     struct packet_buffer* buffer;
     struct arp_entry *next;
@@ -352,7 +352,7 @@ struct arp_entry* getArpEntry(uint32_t ipAddr) {
   	
   	while (entry->next) {
         entry = entry->next;
-      	if (ipAddr == entry->ip.s_addr && entry->macNotNull) {
+      	if (ipAddr == entry->ip.s_addr && entry->macNotNull == 1) {
         	// Parameter IP address found in ARP cache, return ARP table entry
           	return entry;
         }
@@ -438,6 +438,17 @@ void sendBufferPackets(struct arp_entry* cacheEntry) {
     cacheEntry->buffer = NULL;
 }
 */
+
+/*
+	Debugging function used to print an IP address
+*/
+void print_ip(uint32_t ip) {
+	printf("\n\n");
+	printf("%d.",ip&0xf000);
+	printf("%d.",ip&0x0f00);
+	printf("%d.",ip&0x00f0);
+	printf("%d\n\n",ip&0x000f);
+}
 
 void print_ethFrame(struct sr_ethernet_hdr *ethFrame) {
 
