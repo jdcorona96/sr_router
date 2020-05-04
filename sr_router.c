@@ -22,11 +22,6 @@
 #include "sr_router.h"
 #include "sr_protocol.h"
 
-// may not be used
-//#define ETH0IP "172.29.9.200"
-//#define ETH1IP "172.29.9.198"
-//#define ETH2IP "172.29.9.214"
-  
 // Data Structures //
 
 //struct for ARP table's buffer
@@ -197,14 +192,17 @@ void sr_handlepacket(struct sr_instance* sr,
             struct packet_buffer* buffer;
             buffer = arpEntry->buffer;
             unsigned char* addr = arpEntry->addr;   
-            
+           
+            printf("starting IP packet loop\n");
             // sending all waiting packets
             while (buffer != NULL) {
 
-                struct sr_arphdr *arp_rep = (struct sr_arphdr*) (buffer + sizeof(struct sr_ethernet_hdr));
- 
-                memcpy(arp_rep->ar_tha, addr, sizeof(unsigned char)*6);
-                rc = sr_send_packet(sr,buffer->packet, buffer->len, buffer->interface);
+                uint8_t* pkt = buffer->packet;
+                struct sr_ethernet_hdr *eth_rep = (struct sr_ethernet_hdr*) pkt;
+                printf("%p %p\n",eth_rep, addr);
+                memcpy(eth_rep->ether_dhost, addr, sizeof(unsigned char)*6);
+                printf("%p %d %s\n",pkt, buffer->len, buffer->interface);
+                rc = sr_send_packet(sr,pkt, buffer->len, buffer->interface);
                 printf("sending IP after ARP reply\n");
                 assert(rc == 0);
                 struct packet_buffer* temp = buffer;
@@ -275,6 +273,12 @@ void sr_handlepacket(struct sr_instance* sr,
 
         strcpy(iface, matchingEntry->interface);
 
+        // retrieve interface
+        struct sr_if* inf = sr_get_interface(sr, iface);
+
+        // placing ethernet src in packet
+        memcpy(eth_hdr->ether_shost, inf->addr,ETHER_ADDR_LEN);
+
 
   		arpRecord = getArpEntry(nexthopIp);
   	
@@ -283,7 +287,6 @@ void sr_handlepacket(struct sr_instance* sr,
 
             printf("arp record found\n");
             // Update ethernet header and send the packet to the IP:MAC given
-        	memcpy(eth_hdr->ether_shost, eth_hdr->ether_dhost, sizeof(uint8_t)*ETHER_ADDR_LEN); 
           	memcpy(eth_hdr->ether_dhost, arpRecord->addr, sizeof(uint8_t)*ETHER_ADDR_LEN);
             
             print_ethFrame(eth_hdr);
@@ -324,7 +327,6 @@ void sr_handlepacket(struct sr_instance* sr,
             unsigned char broad[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
             memcpy(eth_request->ether_dhost, broad, ETHER_ADDR_LEN);
 
-            struct sr_if* inf = sr_get_interface(sr, iface);
             memcpy(eth_request->ether_shost, inf->addr, ETHER_ADDR_LEN);
 
             eth_request->ether_type = htons(0x0806);
@@ -410,9 +412,12 @@ struct arp_entry* updateArpCache(uint32_t ipAddr, unsigned char* macAddr) {
             printf("ip address found in chache\n");
             // IP address found in ARP cache, update ARP cache's IP:MAC mapping and return
             if (macAddr != NULL) {
+                printf("adding mac adress\n");
                 memcpy(cur->addr, macAddr, sizeof(unsigned char)*ETHER_ADDR_LEN);
                 cur->macNotNull = 1;
             }
+
+            printf("returning baby\n");
             return cur;
         }
 
